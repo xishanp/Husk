@@ -3,7 +3,7 @@
 这份文件是**对外承诺**的范围。内部口径在 [`docs/GOALS.md`](docs/GOALS.md)；两份冲突时以
 GOALS 为准，并改这份文件。
 
-## 已交付（0.01，2026-11-24）
+## 已交付（0.0.1，2026-11-24）
 
 - **loader + path shim**：glibc 用户态作为普通应用进程直接在 Android 内核上跑，零 `ptrace`、
   零 namespace、零虚拟化。

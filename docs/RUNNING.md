@@ -3,7 +3,7 @@
 这份文档回答三件事：**资产怎么装进去**、**环境有什么要求**、**装上发行版之后必须改哪些东西
 才能完整跑起来**。
 
-版本 **0.02**。
+版本 **0.0.2**。
 
 ## 1 · 交付形态：打进 APP
 
@@ -136,7 +136,7 @@ getent passwd | head -3
 独立安装（不装 APK）的验收多两条，实测见 `docs/design/evidence/157-standalone-install-c4.md`：
 
 ```sh
-./husk --version                                  # husk 0.02
+./husk --version                                  # husk 0.0.2
 ./husk run ubuntu -c 'apt-get update'             # 需要 resolv.conf，见 §7
 ./husk run ubuntu -c 'eglinfo -B | grep -i renderer'
 # 期望：zink Vulkan 1.3(Mali-G77 MC9 (MESA_PANVK))，不是 llvmpipe

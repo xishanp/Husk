@@ -4,12 +4,12 @@
 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本 2.0.0](https://semver.org/lang/zh-CN/)。
 
-**每条结论都带证据编号**，原始输出在 `docs/design/evidence/`。0.01 之前的工程日记（36 条，
+**每条结论都带证据编号**，原始输出在 `docs/design/evidence/`。0.0.1 之前的工程日记（36 条，
 按时间顺序）在 [`docs/design/DEVLOG.md`](docs/design/DEVLOG.md)。
 
 ## [未发布]
 
-## [0.02] - 2026-11-24
+## [0.0.2] - 2026-11-24
 
 这一版没有新功能，只有「装得上、跑得稳、说得准」。全部结论来自目标机实测
 （`docs/design/evidence/156`、`157`）。
@@ -34,7 +34,7 @@
 
 ### 变更
 
-- **GPU 接进 0.01 之后的树**：kbase 后端的 PanVK（FristOneRR）与它的 ICD 进包，
+- **GPU 接进 0.0.1 之后的树**：kbase 后端的 PanVK（FristOneRR）与它的 ICD 进包，
   `vulkan-probe` 枚举到 `Mali-G77 MC9` 且 compute 回读 `0x4855534b`；会话默认把 GL 交给
   Zink，renderer 从 `llvmpipe` 变成 `zink Vulkan 1.3(Mali-G77 MC9)`（evidence 156）。
   `HUSK_GPU=llvmpipe` 可退回软件路径。**上限仍是 GLES 2.0，窗口呈现（WSI）未做。**
@@ -49,7 +49,13 @@
   三类不受控路径。
 - 顶层文档全中文；去掉仓库里的设备序列号与本机代理地址；删掉多余的 `v0.1.0` 标签。
 
-## [0.01] - 2026-11-24
+### 更正
+
+- 本版最初按「小数位加一」写成 `0.02` / `v0.02`，两段式不是合法 SemVer；发布当天更正为
+  `0.0.2` / `v0.0.2`，上一版同理（`0.01` → `0.0.1`）。代码与资产内容不变，只有版本字符串改了。
+  规则现在写死在 `CONTRIBUTING.md`：patch 位加一，**发出去的 tag 不再改名、不再移动**。
+
+## [0.0.1] - 2026-11-24
 
 首个发布版本。参考环境：arm64、Android 13、kernel 4.19.191、4 KiB 页，以 `untrusted_app`
 运行，无 root。机型与 SoC 只是那一次实测的现场，不是运行时的要求。
@@ -89,7 +95,7 @@
 
 ### 运行时上限（不属于本版交付能力）
 
-这些是运行时被验证到过的上限，**0.01 交付的资产里不含桌面那一层**，它们由应用侧提供：
+这些是运行时被验证到过的上限，**0.0.1 交付的资产里不含桌面那一层**，它们由应用侧提供：
 
 - GNOME Shell 46 的 X11 会话能在 loader 下起完整一帧（evidence 147）。
 - 触摸经 `TouchInputHandler` → 进程内 X server → XI2 → mutter 落到窗口（evidence 148）。
@@ -101,6 +107,6 @@
 - 传感器、GPS、USB、蓝牙、NFC、指纹、硬件视频解码、WSI：未开始。
 - 随附 rootfs 里没有浏览器包；Termux 不是支持的环境。
 
-[未发布]: https://github.com/xishanp/Husk/compare/v0.02...HEAD
-[0.02]: https://github.com/xishanp/Husk/releases/tag/v0.02
-[0.01]: https://github.com/xishanp/Husk/releases/tag/v0.01
+[未发布]: https://github.com/xishanp/Husk/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/xishanp/Husk/releases/tag/v0.0.2
+[0.0.1]: https://github.com/xishanp/Husk/releases/tag/v0.0.1

@@ -64,24 +64,28 @@ make loader
 
 ## 发布
 
-版本号只有一个来源：仓库根的 `VERSION`。`./husk --version`、`CHANGELOG.md` 最新一节、
-release tag 三处由 `make version-check` 强制对齐。
+版本号只有一个来源：仓库根的 `VERSION`，内容是**三段式 SemVer**（`0.0.x`）。写 `0.02` 这种
+两段式不是合法 SemVer，工具和 release 页面都会对不上，不要用。`./husk --version`、
+`CHANGELOG.md` 最新一节、release tag 三处由 `make version-check` 强制对齐。
 
-**每发一版，小数位加一：0.01 → 0.02 → 0.03 …**（不跳号、不回填）。发版流程：
+**每发一版，patch 位加一：0.0.1 → 0.0.2 → 0.0.3 …**（不跳号、不回填；`0.0.x` 阶段不承诺
+任何接口稳定）。**已经发出去的 tag 不改名、不移动**——否则下载同一个链接的人会拿到不同的
+东西；唯一的例外是刚发布当天就发现版本号本身写错，那种情况要当场改完，并在 CHANGELOG 里
+留一行说明。发版流程（下面以 `0.0.3` 为例）：
 
 ```sh
 # 1. 版本与变更
-printf '0.02\n' > VERSION
-#    在 CHANGELOG.md 顶部加一节 ## [0.02] - YYYY-MM-DD，并把链接改成
-#    [0.02]: https://github.com/xishanp/Husk/releases/tag/v0.02
+printf '0.0.3\n' > VERSION
+#    在 CHANGELOG.md 顶部加一节 ## [0.0.3] - YYYY-MM-DD，并把链接改成
+#    [0.0.3]: https://github.com/xishanp/Husk/releases/tag/v0.0.3
 make check                     # 含 version-check
 NDK=<ndk>/bin make dist        # 产出 dist/husk-arm64.tar.gz + SHA256SUMS
 
 # 2. 打标签、推、建 release（annotated tag，不要轻量标签）
-git tag -a v0.02 -m "Husk 0.02"
-git push origin main && git push origin v0.02
-gh release create v0.02 dist/husk-arm64.tar.gz dist/SHA256SUMS \
-  --title "Husk 0.02" --notes-file <(sed -n '/## \[0.02\]/,/## \[/p' CHANGELOG.md)
+git tag -a v0.0.3 -m "Husk 0.0.3"
+git push origin main && git push origin v0.0.3
+gh release create v0.0.3 dist/husk-arm64.tar.gz dist/SHA256SUMS \
+  --title "Husk 0.0.3" --notes-file <(sed -n '/## \[0.0.3\]/,/## \[/p' CHANGELOG.md)
 ```
 
 release notes 里必须写：本版修了什么（带 evidence 编号）、已知问题、产物 sha256。
