@@ -27,6 +27,20 @@
 - H62 VA 资产未进 dist 与 App assets：`husk_drv_video.so`、`libgstvaapi.so`、`vainfo`，随 H61 同批处理。
 - H63 X11 → WD 迁移：用户指定延后，另行立项。
 
+### 高通（Adreno / KGSL）链路（2026-11-28）
+
+- 新增 `vendor/turnip/d211037c-adreno-825/`：Mesa `27.0.0-devel`（`d211037c`）源码构建的 Turnip，
+  驱动 SHA-256 `35577a1a…89ad75f5`，附 `husk_turnip_guest.json`、Mesa MIT 许可证与 `PROVENANCE.md`（evidence 371）。
+- 安装器（`tools/guest/install-husk.sh`）在宿主机只有 `/dev/kgsl-3d0` 时解压该快照、核 SHA-256 并落 canonical ICD；
+  `adreno-kgsl` 家族的 ICD 选择把 `husk_turnip_guest.json` 排第一，`gpu-env` 固定 `zink`（实测原生 freedreno 壁纸成块状错色）。
+  与 Mali 的 `vendor/panvk/` 是两条独立驱动链、两份 ICD、两套环境变量面，互不覆盖。
+- 新增 `tools/ci/audit-turnip-bundle.sh`（进 `make check`）与 `tools/device-tests/29-turnip-kgsl.sh`；
+  `make dist` 携带 `vendor/turnip/` 并断言存在。
+- 修掉两个高通构建缺陷：漏 `-Dfreedreno-kmds=kgsl`（`TU_HAS_KGSL` 未定义 → 0 物理设备 → `gnome-shell` 139，H64）、
+  漏 `-Dplatforms=x11`（无 X11 WSI → 表面创建 `pc=0` 段错误，H65）。
+- 真机结果：`zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP))`、GL 4.6 / GLES 3.2、glxgears 607/997/940 FPS、
+  壁纸块状错色消失、GNOME 不再 139；**客户窗口内容上屏仍 FAIL**（宿主 X server 取不到 DRM 渲染节点，DRI3 不可用，见 LEDGER §21）。
+
 ## [0.0.37] - 2026-11-27
 
 ### 文档校正（2026-11-28）

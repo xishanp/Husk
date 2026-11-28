@@ -38,6 +38,7 @@ LOADER=${NR_LD:-}
 USER_NAME=root
 FRESH=no
 UPGRADE=no
+LOADER_DEST=
 usage() { sed -n '2,25p' "$0"; }
 
 while [ $# -gt 0 ]; do
@@ -45,6 +46,7 @@ while [ $# -gt 0 ]; do
         --rootfs) [ $# -ge 2 ] || { echo "--rootfs needs a value" >&2; exit 64; }; ROOTFS_TAR=$2; shift 2 ;;
         --dest)   [ $# -ge 2 ] || { echo "--dest needs a value" >&2; exit 64; };   DEST=$2; shift 2 ;;
         --loader) [ $# -ge 2 ] || { echo "--loader needs a value" >&2; exit 64; }; LOADER=$2; shift 2 ;;
+        --loader-dest) [ $# -ge 2 ] || { echo "--loader-dest needs a value" >&2; exit 64; }; LOADER_DEST=$2; shift 2 ;;
         --user)   [ $# -ge 2 ] || { echo "--user needs a value" >&2; exit 64; };   USER_NAME=$2; shift 2 ;;
         --fresh)  FRESH=yes; shift ;;
         --upgrade) UPGRADE=yes; shift ;;
@@ -59,6 +61,36 @@ if [ "$UPGRADE" = yes ]; then
     [ -f "$DEST/etc/os-release" ] || { echo "install-husk: --upgrade target has no etc/os-release: $DEST" >&2; exit 66; }
 else
     [ -n "$ROOTFS_TAR" ] || { echo "install-husk: --rootfs is required" >&2; usage >&2; exit 64; }
+fi
+
+# --upgrade swaps libc and the guest tools underneath whatever is already
+# running. Doing that to a live session gives half the processes the old build
+# and half the new one; the observed symptom is gnome-shell dying with 139.
+# Refuse by default and say how to proceed.
+if [ "$UPGRADE" = yes ] && [ -z "${HUSK_ALLOW_LIVE_UPGRADE:-}" ]; then
+    _busy=
+    for _e in /proc/[0-9]*/exe; do
+        _t=$(ls -l "$_e" 2>/dev/null | sed 's/.* -> //') || continue
+        case "$_t" in
+            "$DEST/../.."*|"$HERE/libld.so"|*/husk/libld.so) _busy=$_e ;;
+        esac
+        [ -n "$_busy" ] && break
+    done
+    if [ -n "$_busy" ]; then
+        echo "install-husk: a Husk session is running ($_busy)." >&2
+        echo "  Stop the session (or force-stop the app), then re-run --upgrade." >&2
+        echo "  Override only for a throwaway tree: HUSK_ALLOW_LIVE_UPGRADE=1" >&2
+        exit 75
+    fi
+fi
+
+# The patched libc is built for *this* loader. A session that keeps launching an
+# older loader while the tree carries the new libc segfaults (exit 139). When the
+# tree lives at <app>/files/linux/distributions/<dist>/rootfs, the session loader
+# is <app>/files/linux/husk/libld.so; sync it unless told otherwise.
+if [ -z "$LOADER_DEST" ] && [ "$UPGRADE" = yes ]; then
+    _huskdir=$(cd "$DEST/../.." 2>/dev/null && pwd) || _huskdir=
+    [ -n "$_huskdir" ] && [ -d "$_huskdir/husk" ] && LOADER_DEST="$_huskdir/husk/libld.so"
 fi
 # --rootfs may be a local tarball or a URL; in a terminal (Termux) a URL is the
 # normal case, so that path is not a special case here.
@@ -359,8 +391,13 @@ if [ ! -s "$DEST/etc/machine-id" ]; then
     printf '%s\n' "$_machine_id" > "$DEST/etc/machine-id"
 fi
 chmod 644 "$DEST/etc/machine-id"
+# The stock tarball ships var/lib/dbus/machine-id as an *absolute* symlink to
+# /etc/machine-id. `cp` would follow it and write the host's /etc — on Android
+# that is a read-only system partition ("cp: Read-only file system") and the
+# install aborts at the first dbus step. Replace the name with a regular file.
+if [ -L "$DEST/var/lib/dbus/machine-id" ]; then rm -f "$DEST/var/lib/dbus/machine-id"; fi
 if [ ! -s "$DEST/var/lib/dbus/machine-id" ] || ! cmp -s "$DEST/etc/machine-id" "$DEST/var/lib/dbus/machine-id"; then
-    cp "$DEST/etc/machine-id" "$DEST/var/lib/dbus/machine-id"
+    cat "$DEST/etc/machine-id" > "$DEST/var/lib/dbus/machine-id"
 fi
 chmod 644 "$DEST/var/lib/dbus/machine-id"
 
@@ -569,6 +606,56 @@ if ( : <> /dev/mali0 ) 2>/dev/null; then
     unset _pb
 fi
 unset _bundle_panvk_rel _panvk_driver
+
+# 2b-2b-0b. 高通（Adreno / KGSL）Turnip 发行快照。发行版 Mesa 的 freedreno ICD 指向
+#        发行版自带的 libvulkan_freedreno.so，在只有 /dev/kgsl-3d0 的 Android 设备上
+#        那份驱动枚举不出物理设备（zink 选不到 pdev -> gnome-shell 退出 139）。
+#        这里只在宿主机确有 kgsl-3d0 时解压 Husk 源码构建的 Turnip，并落一份 guest
+#        相对路径的 canonical ICD。与 Mali 的 PanVK 完全分开：两套后端、两套 ICD、
+#        两套环境变量面，互不覆盖。
+_bundle_turnip_rel=vendor/turnip/d211037c-adreno-825
+_turnip_driver=usr/lib/aarch64-linux-gnu/libvulkan_freedreno_husk.so
+if ( : <> /dev/kgsl-3d0 ) 2>/dev/null; then
+    _tb="$HERE/$_bundle_turnip_rel"
+    if [ -f "$_tb/libvulkan_freedreno_husk.so.gz" ] && \
+       [ -f "$_tb/husk_turnip_guest.json" ]; then
+        mkdir -p "$DEST/usr/lib/aarch64-linux-gnu" \
+                 "$DEST/usr/share/vulkan/icd.d" \
+                 "$DEST/usr/share/licenses/husk" \
+                 "$DEST/usr/share/doc/husk/third-party/husk-turnip"
+        _tt="$DEST/tmp/.husk-turnip.$$"
+        if ! gzip -dc "$_tb/libvulkan_freedreno_husk.so.gz" > "$_tt"; then
+            rm -f "$_tt"
+            echo "install-husk: bundled Turnip driver is corrupt" >&2
+            exit 76
+        fi
+        _want=35577a1a08ddbad0fada23e2aae3a1ad7b6a0c6b1c45e470b7eb9dab89ad75f5
+        _have=$(sha256sum "$_tt" | cut -d' ' -f1)
+        if [ "$_have" != "$_want" ]; then
+            rm -f "$_tt"
+            echo "install-husk: bundled Turnip driver sha256 mismatch: $_have" >&2
+            exit 76
+        fi
+        echo "   Turnip: source-built driver verified ($_want)"
+        chmod 755 "$_tt"
+        mv "$_tt" "$DEST/$_turnip_driver"
+        cp "$_tb/husk_turnip_guest.json" \
+           "$DEST/usr/share/vulkan/icd.d/husk_turnip_guest.json"
+        cp "$_tb/LICENSE-Mesa.txt" "$DEST/usr/share/licenses/husk/Husk-Turnip-MIT.txt"
+        cp "$_tb/PROVENANCE.md" \
+           "$DEST/usr/share/doc/husk/third-party/husk-turnip/PROVENANCE.md"
+        chmod 644 "$DEST/usr/share/vulkan/icd.d/husk_turnip_guest.json" \
+                  "$DEST/usr/share/licenses/husk/Husk-Turnip-MIT.txt" \
+                  "$DEST/usr/share/doc/husk/third-party/husk-turnip/PROVENANCE.md"
+        echo "   installed bundled Turnip ($_turnip_driver)"
+        unset _tt _want _have
+    else
+        echo "   WARNING: /dev/kgsl-3d0 is available but the release bundle has no Turnip snapshot;" >&2
+        echo "            GL will fall back to llvmpipe or to the distro freedreno ICD." >&2
+    fi
+    unset _tb
+fi
+unset _bundle_turnip_rel _turnip_driver
 
 # 2b-2b. GPU 运行时默认值：写进 /etc/profile.d，让"进到 guest 里再开程序"也拿到
 #        ICD 与 GL 驱动（husk-session.sh 覆盖的是它自己拉起的那一条会话链）。
@@ -799,7 +886,9 @@ if [ "$_husk_gpu_family" = mali-kbase ]; then
     fi
     unset _husk_driver _husk_api _src _candidate _drv
 elif [ "$_husk_gpu_family" = adreno-kgsl ]; then
+    # Husk 自己那份排在第一位：发行版 freedreno ICD 在 kgsl 上枚举不出设备。
     for _c in \
+        "$DEST"/usr/share/vulkan/icd.d/husk_turnip_guest.json \
         "$DEST"/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json \
         "$DEST"/usr/share/vulkan/icd.d/freedreno_icd.json \
         "$DEST"/usr/share/vulkan/icd.d/*freedreno*.json \
@@ -837,19 +926,28 @@ fi
         echo "MESA_VK_WSI_PRESENT_MODE=mailbox"
         echo "vblank_mode=0"
         echo "-LIBGL_ALWAYS_SOFTWARE"
-        _husk_native_gl=0
-        for _d in "$DEST"/usr/lib/*/dri/kgsl_dri.so "$DEST"/usr/lib/*/dri/freedreno_dri.so; do
-            if [ -r "$_d" ]; then _husk_native_gl=1; break; fi
-        done
-        if [ "$_husk_native_gl" = 1 ]; then
+        # GTK4 的 GL 后端在 zink 上仍有可复现的绘制缺口（与 Mali 同一个问题），
+        # 只影响 GTK 自己，桌面合成仍然走 zink。
+        echo "GSK_RENDERER=cairo"
+        # 原生 freedreno（kgsl_dri）在 Adreno 825 上实测壁纸成块状错色（evidence 370/371），
+        # 所以只要树里有 Husk 的 Turnip，就固定走 zink -> Turnip；原生只作为回退。
+        _husk_gl=zink
+        if [ ! -r "$DEST/usr/lib/aarch64-linux-gnu/libvulkan_freedreno_husk.so" ]; then
+            _husk_native_gl=0
+            for _d in "$DEST"/usr/lib/*/dri/kgsl_dri.so "$DEST"/usr/lib/*/dri/freedreno_dri.so; do
+                if [ -r "$_d" ]; then _husk_native_gl=1; break; fi
+            done
+            [ "$_husk_native_gl" = 1 ] && _husk_gl=native
+            unset _husk_native_gl _d
+        fi
+        if [ "$_husk_gl" = native ]; then
             echo "!MESA_LOADER_DRIVER_OVERRIDE=kgsl"
             echo "!GALLIUM_DRIVER=freedreno"
         else
-            # 只有 Turnip ICD、没有原生 Gallium 时，GL 走 zink->Turnip。
             echo "!MESA_LOADER_DRIVER_OVERRIDE=zink"
             echo "!GALLIUM_DRIVER=zink"
         fi
-        unset _husk_native_gl _d
+        unset _husk_gl
     fi
 } > "$DEST/etc/husk/gpu-env"
 chmod 644 "$DEST/etc/husk/gpu-env"
@@ -860,7 +958,7 @@ elif [ "$_husk_gpu_family" = mali-kbase ] || [ "$_husk_gpu_family" = adreno-kgsl
 else
     echo "   wrote etc/husk/gpu-env ($_husk_gpu_family; no driver override)"
 fi
-unset _c _d _husk_icd _husk_native_gl _husk_gpu_family
+unset _c _d _husk_icd _husk_native_gl _husk_gl _husk_gpu_family
 
 # 2b-4. 外观默认值：gschema override。Ubuntu 的 Yaru 外观是 `ubuntu-settings` 用
 #       gschema override 钉出来的，这个 rootfs 里没有那个包（yaru 的主题文件都在），
@@ -969,6 +1067,27 @@ if [ -f "$shipped_libc" ] && [ -f "$tree_libc" ]; then
     fi
     libc_sha=$want
     echo "   libc $(echo "$libc_sha" | cut -c1-12) matches the bundle"
+
+if [ -n "$LOADER_DEST" ] && [ -f "$LOADER" ]; then
+    echo "== session loader =="
+    want_ld=$(sha256sum "$LOADER" | cut -d' ' -f1)
+    have_ld=
+    [ -f "$LOADER_DEST" ] && have_ld=$(sha256sum "$LOADER_DEST" | cut -d' ' -f1)
+    if [ "$want_ld" = "$have_ld" ]; then
+        echo "   $LOADER_DEST already $(echo "$want_ld" | cut -c1-12)"
+    else
+        if cp "$LOADER" "$LOADER_DEST" 2>/dev/null; then
+            chmod 711 "$LOADER_DEST"
+            have_ld=$(sha256sum "$LOADER_DEST" | cut -d' ' -f1)
+            [ "$want_ld" = "$have_ld" ] || { echo "install-husk: loader sync failed" >&2; exit 76; }
+            echo "   $LOADER_DEST -> $(echo "$want_ld" | cut -c1-12) (was ${have_ld:-absent})"
+        else
+            echo "install-husk: cannot replace $LOADER_DEST (running session?);" >&2
+            echo "  a tree with the new libc and the old loader segfaults (exit 139)." >&2
+            exit 76
+        fi
+    fi
+fi
 else
     echo "   (no bundled libc.so.6 next to the installer; keeping the tree's own)" >&2
 fi

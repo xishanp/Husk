@@ -65,6 +65,7 @@ check:
 	sh tools/ci/test-session-gpu-escape.sh
 	sh tools/ci/test-session-rootfs-bundle.sh
 	sh tools/ci/audit-panvk-bundle.sh
+	sh tools/ci/audit-turnip-bundle.sh
 	sh tools/ci/test-runtime-boundary.sh
 	sh tools/ci/test-runtime-private-paths.sh
 	sh tools/ci/test-pipewire-plugin-audit.sh
@@ -430,8 +431,10 @@ dist: preloads
 	   tools/guest-config/net.hadess.SensorProxy.policy \
 	   tools/guest-config/60-husk-sensor-proxy.rules \
 	   tools/guest-config/mksys-net.sh dist/guest-config/
-	@mkdir -p dist/vendor/panvk dist/vendor/pipewire/src/gst
+	@mkdir -p dist/vendor/panvk dist/vendor/pipewire/src/gst dist/vendor/turnip
 	cp -R vendor/panvk/fristonerr-1.2.0-mali-g77 dist/vendor/panvk/
+# 高通（Adreno/KGSL）与 Mali 是两条独立驱动链；发布包必须同时携带，安装器按设备节点二选一。
+	cp -R vendor/turnip/d211037c-adreno-825 dist/vendor/turnip/
 	cp vendor/pipewire/1.0.5-gst-caps-subset.patch vendor/pipewire/COPYING \
 	   vendor/pipewire/PROVENANCE.md dist/vendor/pipewire/
 	cp vendor/pipewire/src/gst/gstpipewiresrc.c dist/vendor/pipewire/src/gst/
@@ -520,7 +523,10 @@ dist: preloads
 	    vendor/panvk/fristonerr-1.2.0-mali-g77/libvulkan_panfrost_frist370_execva.so.gz \
 	    vendor/panvk/fristonerr-1.2.0-mali-g77/husk_panvk_guest.json \
 	    vendor/panvk/fristonerr-1.2.0-mali-g77/LICENSE-Mesa.txt \
-	    vendor/panvk/fristonerr-1.2.0-mali-g77/PROVENANCE.md; do \
+	    vendor/panvk/fristonerr-1.2.0-mali-g77/PROVENANCE.md \
+	    vendor/turnip/d211037c-adreno-825/libvulkan_freedreno_husk.so.gz \
+	    vendor/turnip/d211037c-adreno-825/husk_turnip_guest.json \
+	    vendor/turnip/d211037c-adreno-825/PROVENANCE.md; do \
 	    tar tzf dist/husk-arm64.tar.gz | grep -qx "$$f" || \
 	        { echo "dist: bundle is missing $$f" >&2; exit 1; }; \
 	done

@@ -1,5 +1,7 @@
 # Husk 总待办清单 · 0.0.37（rev2 · 2026-11-27）
 
+> **本文件已并入 [`LEDGER.md`](LEDGER.md)。** 状态以 LEDGER 为准；这里保留原文与已勾证据，不再单独维护。
+>
 > 本文件只针对 **Husk 仓库和 Husk 运行时**。另一个仓库（PRoot 宿主 App）不改、不读源码，只作黑盒运行容器；它覆盖 Husk 配置时记「外部阻塞」。
 
 ## 0 · 本版口径（先看这一段）
@@ -123,7 +125,8 @@
 ### Adreno / KGSL
 
 - [ ] 没真机写 UNKNOWN。
-- [ ] 有真机后验证：KGSL 节点、Turnip ICD、zink、Vulkan、GLES、桌面、长稳。
+- [x] 有真机后验证：KGSL 节点、Turnip ICD、zink、Vulkan、GLES、桌面、长稳。
+  - 真机 OPPO PLE110 / Adreno 825（2026-11-28，evidence 370 + 371）：KGSL 节点、Turnip ICD、zink、Vulkan 1.4、GL 4.6 / GLES 3.2 **PASS**；桌面可起且壁纸错色已消失 **PASS**；客户窗口内容上屏 **FAIL**（宿主 DRI3 取不到 DRM 节点，见 §21）；长稳 soak **NOT VERIFIED**（用户中止设备测试）。自证脚本 `tools/device-tests/29-turnip-kgsl.sh` 11/11 PASS。
 
 ---
 

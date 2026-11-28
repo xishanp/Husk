@@ -1,5 +1,7 @@
 # 缺陷账本（Defect ledger）
 
+> **本文件已并入 [`LEDGER.md`](../../LEDGER.md)。** 结论以 LEDGER 为准；这里只追加、不改写历史条目。
+
 规则：**只追加，不覆盖、不重编号**。每条带：编号 · 一句话 · 证据（文件/命令）·
 状态（OPEN / FIXED / OUT-OF-SCOPE / UNVERIFIED）· 门禁归属。
 
@@ -154,3 +156,5 @@ X server，不是 Husk 运行时的缺陷；Husk 的发行资产本来就不包�
 | H61 | 标准 VA-API 视频路径（gst-vaapi → vaapih264dec → bridge → MediaCodec）在 1080p 停摆：720p Constrained Baseline 90/90 帧 2 s 跑完，720p High / 1080p Baseline / 1080p High 都在 12–25 帧后卡住 | evidence `367-video-va-ab-20261128`：取出的 1080p High 帧与 ffmpeg 参考逐像素全等（diff 0.0，排除 CSD 错）；停摆时 `FRAME_NONE pending=0 frames=4`，logcat `c2.mtk.avc.decoder [in=4 pipeline=0 out=13]`。已试背压、`wait_ms` 短轮询、`fetch_any` 泵队列，均未解决 | **OPEN（0.0.38）** 输出泵问题，需从 codec 输出队列与桥的取帧顺序继续查；不得宣称 VA-API 可用 | `367-video-va-ab` |
 | H62 | VA 相关资产只在设备 rootfs 里，**没进 dist tar、也没进 App assets**：`husk_drv_video.so`、`gstreamer1.0-vaapi`（`libgstvaapi.so`）、`vainfo` | 2026-11-28 核对：`dist/husk-arm64.tar.gz` 内容清单无这些文件；`vendor/` 下也没有对应来源记录。设备上能跑是因为手工 apt + 手工部署 | **OPEN（随 H61 一起做）** 打包必须与 H61 同批，否则发出去的包不可能有 VA 路径；不要在 H61 未通过前单独发 VA 资产 | dist 内容断言 |
 | H63 | X11 → WD 迁移（换掉 X11 合成/呈现链路） | 用户 2026-11-28 明确：该项**延后**，不在 0.0.38 的当前批次 | **DEFERRED（用户指定）** 等单独立项；在此之前不改 X11/Wayland 选型 | — |
+| H64 | 高通端 Turnip 构建漏 `-Dfreedreno-kmds=kgsl`：`TU_HAS_KGSL` 未定义，`tu_enumerate_devices()` 整段不编译，`vkEnumeratePhysicalDevices` 返回 `VK_ERROR_INITIALIZATION_FAILED`（0 个物理设备）→ zink 选不到 pdev → `gnome-shell` 退出 **139** | evidence `371-qualcomm-turnip-sourcebuild-kgsl-20261128` §2.1：`doro-gnome-shell.log` 原文 `MESA: error: ZINK: vkEnumeratePhysicalDevices failed (VK_ERROR_INITIALIZATION_FAILED)` / `failed to choose pdev`；同时 `VK_LOADER_DEBUG=all` 证明驱动已成功 dlopen 并返回函数指针，不是加载失败。`meson.options` 里 `freedreno-kmds` 默认只带 `msm` | **FIXED（2026-11-28）** 构建加 `-Dfreedreno-kmds=kgsl,msm`；`tools/ci/audit-turnip-bundle.sh` 断言驱动内含 `/dev/kgsl-3d0`，`29-turnip-kgsl.sh` 第 3 项真机复核 | `make check` + 29-turnip-kgsl.sh |
+| H65 | 高通端 Turnip 构建漏 `-Dplatforms=x11`：`wsi_common_x11.c` 不编译，表面创建走空指针，GL 客户端 `pc=0` 段错误（path-shim 捕获寄存器打印） | evidence `371` §2.2：`segv|sig=11|fa=0|pc=0|lr=525259073716|…`；修后 `NEEDED` 出现 `libxcb-dri3.so.0 / libxcb.so.1 / libX11-xcb.so.1 …`，与发行版 freedreno 驱动依赖集合对齐 | **FIXED（2026-11-28）** 构建加 `-Dplatforms=x11 -Dxlib-lease=disabled`；`audit-turnip-bundle.sh` 断言驱动链接 `libxcb-dri3.so.0` | `make check` + 29-turnip-kgsl.sh |

@@ -41,11 +41,18 @@ A-hw `PASS=14 FAIL=0`、GPU 默认值 `PASS=9 FAIL=0`。离线树没有 apt inde
 | `/dev/mali0` 直开 | 可用 | evidence 156 |
 | PanVK（kbase 后端）枚举 + compute + 离屏 graphics | 可用，`Mali-G77 MC9` | evidence 156 |
 | GL/EGL 经 Zink 落到 GPU | 可用，renderer `zink Vulkan 1.3(Mali-G77 MC9)`；GLES 上限 3.2（靠 `MESA_GLES_VERSION_OVERRIDE`，zink 默认只报 ES 2.0，真实应用未验） | evidence 156、182 |
+| 高通 KGSL 直开 `/dev/kgsl-3d0` | 可用，参考机 `Adreno 825`（OPPO PLE110 / SM8735 / Android 16） | 370、371 |
+| Turnip（KGSL 后端，源码构建） | 可用：`zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP))`，GL 4.6 / GLES 3.2，`direct rendering: Yes` | 371 |
+| 高通 GL 吞吐 | glxgears 328×366、vblank off：607 / 997 / 940 FPS | 371 |
+| 高通壁纸/GL 客户端画面正确性 | 壁纸块状错色消失；GNOME 不再退出 139 | 371 |
+| 高通桌面窗口内容上屏 | **不可用**：宿主 X server 取不到 DRM 渲染节点，`DRI3 error: Could not get DRI3 device`，mutter 无法合成客户窗口；属宿主侧阻塞 | 371 §4 |
 | GPU 并发与长稳（无 X） | 4 路并发 × 300 s（Rust 门禁）：每路约 570–572 fps，fd 不变、RSS +244 kB、GL 错误 0；固定管线（即时模式 + 光照）320 fps | evidence 292、329 |
 | GPU 宿主窗口路径 | 历史 X11 窗口结果使用 LinuxHub 2.0 提供的 X server。**Husk 运行资产本身不带 X server**，独立桌面启动为 UNVERIFIED；窗口内容进入 X server 仍不是零拷贝 | evidence 165、245、278、292、312 |
 
 不开 Zink 时 GL 落在 `llvmpipe`；开了 zink 但用发行版自带的 `panfrost_icd.json` 会
 `VK_ERROR_INCOMPATIBLE_DRIVER`，因为它要的是 DRM render node，本机只有 kbase。
+高通侧同理：发行版预编译 `freedreno_icd*.json` 在 KGSL 上枚举出 0 个物理设备，桌面直接 139；
+默认必须选 `husk_turnip_guest.json`（我们源码构建的 Turnip）。
 
 ## 浏览器
 

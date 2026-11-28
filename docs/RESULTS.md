@@ -90,7 +90,13 @@ Gate A 的 SKIP 是离线树没有 apt package index。没有把它算成 PASS�
 | 4 路并发 × 300 秒（Rust 门禁） | 每路约 570–572 fps，fd 不变，RSS 变化 +244 kB，GL 错误 0 | 292、329 |
 | 固定管线 | 320 fps | 292 |
 | 2400×1080 着色器负载 | GPU 41.9 fps vs llvmpipe 3.7 fps | 174 |
-| Adreno/KGSL | 无真机证据，UNKNOWN | 233、243 |
+| Adreno 825 KGSL 节点 | `/dev/kgsl-3d0` 在 app uid 下可 O_RDWR 打开 | 370、371 |
+| Adreno 驱动来源 | Turnip 源码构建（Mesa `27.0.0-devel` / `d211037c`），SHA-256 `35577a1a…89ad75f5` | 371 |
+| Adreno Zink/EGL/GL 默认渲染器 | `zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP))`，GL 4.6 / GLES 3.2，`direct rendering: Yes` | 371 |
+| Adreno glxgears（328×366，vblank off） | 607 / 997 / 940 FPS | 371 |
+| Adreno 壁纸块状错色 | 消失（370 的洋红竖列不再复现），GNOME 不再 139 | 371 |
+| Adreno 客户窗口内容上屏 | **FAIL**：窗口 `Viewable` 但 X 根图无其像素；`DRI3 error: Could not get DRI3 device`；宿主无 DRM 渲染节点 | 371 §4 |
+| Adreno 长稳 soak | **NOT VERIFIED**：用户中止设备测试，无 ≥300 s 样本 | 371 §5 |
 
 ## 5. 硬件
 

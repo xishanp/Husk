@@ -47,11 +47,14 @@ namespace、VM 或独立威胁模型。
 - Mali-G77 MC9 直开 `/dev/mali0`；
 - PanVK 枚举、compute、离屏 graphics；
 - Zink/EGL/GL 默认环境由 loader 注入；
-- 2400×1080 重负载 GPU 相对 llvmpipe 快 11.2×。
+- 2400×1080 重负载 GPU 相对 llvmpipe 快 11.2×；
+- Adreno 825 直开 `/dev/kgsl-3d0`，源码构建 Turnip 经 Zink 出 `zink Vulkan 1.4`、GL 4.6 / GLES 3.2，
+  glxgears 607–997 FPS，壁纸块状错色消失。
 
 未完成或未验证：
 
-- Adreno/KGSL 真机；
+- Adreno 客户窗口内容上屏（宿主 X server 没有 DRM 渲染节点，DRI3 不可用）；
+- Adreno 长稳 soak；
 - 依赖 geometry shader 的 DXVK 程序；
 - GLES 3.2 的真实应用覆盖；
 - 窗口内容进入 X server 的零拷贝；
@@ -82,7 +85,7 @@ GPU 表面 -> CPU 回读 -> X server / SHM 拷贝 -> 应用侧 AHB -> 屏幕
 
 | 设备类 | 状态 | 说明 |
 |---|---|---|
-| GPU | 直连 | `/dev/mali0` + PanVK；Adreno 未真机验证 |
+| GPU | 直连 | Mali：`/dev/mali0` + PanVK；Adreno：`/dev/kgsl-3d0` + 源码构建 Turnip。Adreno 的 GL 链已通，桌面窗口上屏未通（宿主 DRI3） |
 | 相机 | 中转 | 标准 V4L2 facade，后端 Camera2；不支持 DMABUF/controls |
 | 音频 | 中转 | PulseAudio → Rust relay → AAudio；无 `/dev/snd` |
 | 视频解码 | 中转 | VA-API → MediaCodec；标准 VA-API 路径目前只有 720p Constrained Baseline 实测通过，1080p 与 High profile 会停摆（`367-video-va-ab-20261128`），不能宣称播放器可用 |
@@ -129,6 +132,7 @@ open+close x 20,000 Husk 980.9 ms    PRoot 5,676.3 ms
 - kernel 4.19.191；
 - 4 KiB 页；
 - Mali-G77 MC9；
+- Adreno 825（OPPO PLE110 / SM8735 / Android 16 / kernel 6.6.118）的 KGSL + Turnip + Zink GL 链路；
 - glibc 2.39 参考树。
 
 未验证或未知：
@@ -136,7 +140,7 @@ open+close x 20,000 Husk 980.9 ms    PRoot 5,676.3 ms
 - 16 KiB / 64 KiB 页真机；
 - 其他 Android 版本；
 - 其他厂商 SELinux/seccomp；
-- Adreno/KGSL 真机；
+- Adreno 客户窗口合成、Adreno 长稳、其他 Adreno 型号；
 - 其他 glibc 版本；
 - 多设备升级与迁移。
 
@@ -152,6 +156,7 @@ Termux 不是交付形态。Husk 的用户态二进制、库、安装路径和 A
 - USB、蓝牙；
 - 窗口内容到 X server 的 dma-buf 直传；
 - 负载型长稳和更多 GPU 应用；
-- 16K/64K 页真机与 Adreno 真机。
+- 16K/64K 页真机；
+- Adreno 窗口合成路径（DRI3 / WD）与负载型长稳。
 
 这些项目的现状以 [`STATUS.md`](STATUS.md) 和对应 evidence 文件为准。

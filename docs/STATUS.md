@@ -1,7 +1,10 @@
 # 当前状态
 
 最后核验：2026-11-28（CST）
-参考设备：RMX3357 / MT6893 / Mali-G77 MC9 / Android 13 / kernel 4.19.191 / arm64 / 4 KiB 页
+参考设备（两条 GPU 链各自的参考机）：
+
+- MediaTek：RMX3357 / MT6893 / Mali-G77 MC9 / Android 13 / kernel 4.19.191 / arm64 / 4 KiB 页
+- Qualcomm：OPPO PLE110 / SM8735 / Adreno 825 / Android 16（SDK 36）/ kernel 6.6.118 / arm64 / 4 KiB 页
 运行域：`untrusted_app`，无 Root、无 Shizuku、未解锁 Bootloader、无硬件虚拟化
 宿主 App：LinuxHub 2.0 的 Husk 运行时 `com.linuxhub.myth.husk`
 
@@ -69,7 +72,7 @@ A-hw 的 11 条失败全部落在“没有人授权 + 宿主没有 socket”两�
 
 | 设备类 | 分类 | guest 接口 | 当前实测 |
 |---|---|---|---|
-| GPU | 直连 | `/dev/mali0`，PanVK + Zink | Mali-G77 MC9 枚举、compute、离屏 graphics、EGL/GL；Adreno/KGSL 仅源码与主机侧测试，真机 UNKNOWN |
+| GPU | 直连 | Mali：`/dev/mali0` + PanVK；Adreno：`/dev/kgsl-3d0` + Turnip（源码构建） | Mali-G77 MC9 枚举、compute、离屏 graphics、EGL/GL 全过。Adreno 825：`zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP))`、GL 4.6 / GLES 3.2、glxgears 607–997 FPS、壁纸块状错色消失（evidence 371）；**客户窗口内容上屏 FAIL**，宿主 X server 取不到 DRM 渲染节点（DRI3），见 §5.2 |
 | 相机 | 中转 | V4L2 `/dev/videoN` facade | 2026-11-27 复验：A-hw 14/0；前后摄各 3 帧 1280×720 NV12；V4L2/GStreamer fixture 两档通过；crop/selection 与 monotonic PTS 已验；DMABUF、通用 controls、非整帧裁剪未支持 |
 | 音频 | 中转 | PulseAudio → Rust relay → AAudio | 输出与采集真实 PCM；采集探针 196,608 bytes、`peak=285` |
 | 视频解码 | 中转 | VA-API → bridge → MediaCodec | 标准 VA-API 路径（gst-vaapi/`vaapih264dec`）720p 全片 PASS，1080p 与 High profile 在 12–25 帧后停摆 **FAIL**（evidence `367-video-va-ab-20261128`） |
@@ -83,6 +86,8 @@ A-hw 的 11 条失败全部落在“没有人授权 + 宿主没有 socket”两�
 “直连”只用于 GPU。相机、音频、视频、传感器和定位都是明确的中转；不能写成“全部直连”。
 
 ## 5. GPU
+
+### 5.1 Mali / kbase（MediaTek）
 
 参考机上的 Mali/kbase 路径已经可用：
 
@@ -105,12 +110,45 @@ kbase「2 秒热身」补丁：上游快照每建一次 context 就 `nanosleep(2
 | 2400×1080，每像素 48 次 `sin`，2 遍 | 23.8 ms/帧（41.9 fps） | 266.7 ms/帧（3.7 fps） | GPU 快 11.2× |
 | 1280×720，同一负载 | 14.9 ms/帧（67.1 fps） | 101.9 ms/帧（9.8 fps） | GPU 快 6.8× |
 
-边界：
+### 5.2 Adreno / KGSL（Qualcomm，Turnip 源码构建）
+
+驱动不再是发行版预编译 freedreno，而是我们自己的源码构建：
+
+```text
+源码      Mesa 27.0.0-devel（快照 d211037c），src/freedreno/vulkan
+驱动      usr/lib/aarch64-linux-gnu/libvulkan_freedreno_husk.so
+SHA-256   35577a1a08ddbad0fada23e2aae3a1ad7b6a0c6b1c45e470b7eb9dab89ad75f5（11487376 B）
+ICD       /usr/share/vulkan/icd.d/husk_turnip_guest.json
+配方      tools/build/build-turnip.sh；PROVENANCE 见 vendor/turnip/d211037c-adreno-825/
+```
+
+真机（OPPO PLE110 / Adreno 825 / Android 16）结果：
+
+```text
+glxinfo -B   direct rendering: Yes
+             Device: zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP)) (0x44030000)
+             Version: 27.0.0 | GL 4.6 | GLES 3.2
+glxgears     328×366，vblank off：607 / 997 / 940 FPS
+maps         gnome-shell 有 7 段 libvulkan_freedreno_husk.so
+device test  tools/device-tests/29-turnip-kgsl.sh：PASS=11 FAIL=0
+```
+
+- 壁纸块状错色（evidence 370 的洋红竖列）**已消失**，GNOME 不再退出 139。
+- 两个构建缺陷已修并写成门禁：漏 `-Dfreedreno-kmds=kgsl` 会 0 设备 → 139（H64），
+  漏 `-Dplatforms=x11` 会表面创建 `pc=0` 段错误（H65）；`audit-turnip-bundle.sh` 直接断言这两个特征串。
+- **客户窗口内容上屏仍是 FAIL**：窗口都 `Viewable`，但 `XGetImage(root)` 里没有它们的像素；
+  `MESA-EGL: warning: DRI3 error: Could not get DRI3 device`。app 进程只有 `/dev/kgsl-3d0`，
+  没有 `/dev/dri/*`；guest 的 `/dev/dri/renderD128` 是 shim 假节点且只实现 `DRM_IOCTL_VERSION`。
+  这是**宿主侧阻塞**，已记 LEDGER §21。
+- 长稳 soak 因用户中止设备测试未跑，状态 **NOT VERIFIED**。
+
+### 5.3 边界
 
 - `PANVK_DXVK_COMPAT=1` 的 geometry shader 崩溃是已知支持边界，默认值规避不等于修复。
 - GLES 3.2 依赖 `MESA_GLES_VERSION_OVERRIDE`，真实应用未完整验证。
 - 窗口内容进入宿主 X server 仍是回读 + SHM 拷贝；DRI3 在当前应用权限布局下不可达。
-- Adreno/KGSL 没有真机证据，状态是 UNKNOWN。
+- Adreno 的原生 freedreno（不经 Zink）仍会出块状错色，所以高通链固定 `GALLIUM_DRIVER=zink`；
+  原生路径只作回退，不作为默认。
 
 ## 6. 与 PRoot 的现场对比
 
@@ -146,7 +184,8 @@ ls: files/rootfs-full/usr/lib/xorg/Xorg: No such file or directory
 ## 8. UNKNOWN / UNVERIFIED
 
 - 16 KiB / 64 KiB 页真机；当前只有 QEMU 证据。
-- Adreno/KGSL、其他 Android 版本、其他厂商 seccomp/SELinux 策略。
+- Adreno 客户窗口内容上屏（宿主 DRI3 不可用）、Adreno 长稳 soak、其他 Android 版本、其他厂商
+  seccomp/SELinux 策略。
 - 持续定位、后台定位、GNSS 原始测量；USB、蓝牙的完整链路。
 - 相机 DMABUF、通用 V4L2 controls、非整帧裁剪、真实 Camera2 的 GStreamer PTS、跨进程假 fd。
 - 窗口内容到 X server 的零拷贝。

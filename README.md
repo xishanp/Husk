@@ -15,7 +15,7 @@
   <img alt="Userland: glibc" src="https://img.shields.io/badge/userland-glibc-0F766E?style=flat-square">
   <img alt="Ubuntu 24.04" src="https://img.shields.io/badge/Ubuntu-24.04-E95420?style=flat-square&logo=ubuntu&logoColor=white">
   <img alt="GNOME 46 / X11 host" src="https://img.shields.io/badge/Desktop-GNOME%2046%20%2F%20X11-4A86CF?style=flat-square&logo=gnome&logoColor=white">
-  <img alt="PanVK / Zink" src="https://img.shields.io/badge/GPU-PanVK%20%2F%20Zink-7C3AED?style=flat-square">
+  <img alt="PanVK + Turnip / Zink" src="https://img.shields.io/badge/GPU-PanVK%20%2B%20Turnip%20%2F%20Zink-7C3AED?style=flat-square">
   <img alt="Android ARM64" src="https://img.shields.io/badge/Platform-Android%20ARM64-3DDC84?style=flat-square&logo=android&logoColor=white">
   <img alt="Rust 1.75+" src="https://img.shields.io/badge/Rust-1.75%2B-DEA584?style=flat-square&logo=rust&logoColor=white">
   <img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square">
@@ -133,7 +133,7 @@ LinuxHub 2.0
   └─ Husk runtime
        ├─ loader + path-shim
        ├─ guest rootfs 安装与修补工具
-       ├─ GPU 默认值与 PanVK 资产
+       ├─ GPU 默认值与随包驱动（Mali→PanVK，Adreno→Turnip）
        └─ 相机、音频、视频、传感器、定位接口
 ```
 
@@ -209,7 +209,7 @@ evidence 为准。
 | 用户与组管理 | 可用 | `husk-usermgr` / `husk-su` 替代不可用的发行版工具 |
 | 中文 locale | 可用 | 默认 `zh_CN.UTF-8`，显式英文设置不会被覆盖 |
 | GPU 默认值 | 可用 | loader 从 `/etc/husk/gpu-env` 注入 ICD、Zink 和 GLES 配置 |
-| GPU 直连 | 可用 | Mali-G77 通过 `/dev/mali0` 使用 PanVK + Zink |
+| GPU 直连 | 可用 | 两条独立链：Mali（kbase）经 `/dev/mali0` 走 PanVK + Zink；Adreno（KGSL）经 `/dev/kgsl-3d0` 走源码构建的 Turnip + Zink |
 
 ## 硬件接口
 
@@ -217,7 +217,7 @@ evidence 为准。
 
 | 设备类 | 分类 | guest 接口 | 当前验收 |
 |---|---|---|---|
-| GPU | **直连** | `/dev/mali0`，PanVK + Zink | Mali-G77 枚举、compute、离屏 graphics、EGL/GL、2400×1080 读回和 4×300 s 并发长稳通过；Adreno/KGSL 真机 UNKNOWN |
+| GPU | **直连** | Mali：`/dev/mali0` + PanVK；Adreno：`/dev/kgsl-3d0` + Turnip | Mali-G77：枚举、compute、离屏 graphics、EGL/GL、2400×1080 读回、4×300 s 并发长稳全过。Adreno 825：Turnip 源码构建，`zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP))`、GL 4.6 / GLES 3.2、glxgears 607–997 FPS、壁纸块状错色消失；**客户窗口内容上屏未通**，卡在宿主 X server 取不到 DRM 渲染节点（DRI3）——外部阻塞，见 LEDGER §21 |
 | 相机 | **中转** | V4L2 `/dev/videoN` facade | Camera2 前后摄、V4L2/GStreamer fixture、read/readv/mmap/拍照/录像数据链通过；桌面预览帧率过低，未达可用 |
 | 音频 | **中转** | PulseAudio → Rust relay → AAudio | 输出和采集得到真实 PCM；`/dev/snd` 在应用域不能直开 |
 | 视频解码 | **中转** | VA-API → bridge → MediaCodec | 720p Constrained Baseline 通过；1080p 和 High profile 在 12–25 帧后停摆，桌面播放器当前不可用 |
@@ -231,10 +231,24 @@ evidence 为准。
 直连”，也不能把整条呈现链写成零拷贝。逐项理由和原始错误见
 [`docs/design/hardware-interface-map.md`](docs/design/hardware-interface-map.md)。
 
+GPU 内部是**两条互不覆盖的驱动链**，不是「一份驱动适配两家」：
+
+| | Mali（MediaTek，kbase） | Adreno（Qualcomm，KGSL） |
+|---|---|---|
+| 设备节点 | `/dev/mali0` | `/dev/kgsl-3d0` |
+| Vulkan 驱动 | PanVK，`vendor/panvk/`，源码构建 | Turnip，`vendor/turnip/`，Mesa `d211037c` 源码构建 |
+| canonical ICD | `husk_panvk_guest.json` | `husk_turnip_guest.json` |
+| `gpu-env` 家族标记 | `@GPU_FAMILY=mali-kbase` | `@GPU_FAMILY=adreno-kgsl` |
+| GL 前端 | Zink | Zink（原生 freedreno 实测壁纸成块状错色，只作回退） |
+
+安装器按宿主实际存在的节点判家族，只解压对应那一份驱动、只落那一份 ICD，另一条链不落地。
+两条链共用同一份 `vk_meta` 源码补丁（H57：blit 单三角形 + 精确 scissor），但驱动二进制各自独立。
+
 ## 交付内容
 
 唯一运行时资产是 `dist/husk-arm64.tar.gz`。包内包含 loader、path-shim、glibc 补丁、安装器、
-guest 工具、GPU 默认值和随包 PanVK 驱动；不包含 X server、桌面合成器或整棵发行版 rootfs。
+guest 工具、GPU 默认值和随包驱动（Mali→PanVK，Adreno→Turnip，按宿主节点二选一）；不包含 X server、
+桌面合成器或整棵发行版 rootfs。
 
 ```text
 usr/bin/
@@ -248,9 +262,11 @@ etc/husk/
   gpu-env                  GPU 默认环境
   runtime-identity         version / commit / 关键 SHA-256
 usr/lib/aarch64-linux-gnu/
-  libvulkan_panfrost_husk.so
+  libvulkan_panfrost_husk.so        Mali（kbase），随 vendor/panvk/
+  libvulkan_freedreno_husk.so       Adreno（KGSL），随 vendor/turnip/
 usr/share/vulkan/icd.d/
-  husk_panvk_guest.json
+  husk_panvk_guest.json             Mali canonical ICD
+  husk_turnip_guest.json            Adreno canonical ICD
 ```
 
 设备上重算 `runtime-identity` 中的 SHA-256 并逐项比对，才能证明当前运行的是这份包，而不是
@@ -315,8 +331,10 @@ docs/design/evidence/    每个结论对应的设备原始输出
 - **相机预览不可用。** 数据链能出帧，但桌面刷新率过低，已列为 0.0.38 后续项。
 - **标准 VA-API 1080p 不可用。** 720p 通过，1080p / High profile 会停摆；相关插件和工具也还
   没有全部进入发行包。
-- **平台覆盖有限。** 16/64 KiB 页真机、Adreno/KGSL、其他 Android 版本和厂商 SELinux/seccomp
-  策略仍未验证。
+- **Adreno 桌面还不能用。** 驱动链（KGSL → Turnip → Zink）已在 Adreno 825 真机跑通，
+  GL 4.6 / GLES 3.2、glxgears 607–997 FPS；但客户窗口内容上屏不通——宿主 X server 拿不到
+  DRM 渲染节点，DRI3 报 `Could not get DRI3 device`，mutter 无法把窗口合成进场景。
+- **平台覆盖有限。** 16/64 KiB 页真机、其他 Android 版本和厂商 SELinux/seccomp 策略仍未验证。
 - **桌面依赖应用侧集成。** Husk 发行资产不包含 X server 或桌面合成器。
 
 更完整的不工作项和原因见 [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md)。

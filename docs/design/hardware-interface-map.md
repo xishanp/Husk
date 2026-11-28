@@ -17,7 +17,8 @@ Husk 的目标不是给某个 Linux 应用单独开洞，而是把 Android 宿�
 
 | 能力 | 分类 | guest 接口 | Android 后端 | 当前状态 |
 |---|---|---|---|---|
-| GPU | 直连 | `/dev/mali0` + Vulkan/EGL | PanVK + Zink（Mali/kbase） | Mali-G77 已真机验证；Adreno/KGSL 仅有适配代码，真机 UNKNOWN |
+| GPU（MediaTek） | 直连 | `/dev/mali0` + Vulkan/EGL | PanVK + Zink（kbase） | Mali-G77 已真机验证 |
+| GPU（Qualcomm） | 直连 | `/dev/kgsl-3d0` + Vulkan/EGL | Turnip + Zink（KGSL） | Adreno 825 驱动链已真机验证（GL 4.6 / GLES 3.2、607–997 FPS）；客户窗口上屏被宿主 DRI3 阻塞 |
 | 相机 | 中转 | V4L2 `/dev/videoN` facade | Camera2 NDK / `AImageReader` | 2026-11-27 复验：A-hw 14/0，前后摄各 3 帧 1280×720 NV12；fixture 的 V4L2/GStreamer 两档通过；crop/selection 与 monotonic PTS 已验；DMABUF、通用 controls、非整帧裁剪未支持 |
 | 音频输出 | 中转 | PulseAudio | Rust relay → AAudio | 真实 PCM 输出已验证 |
 | 音频采集 | 中转 | PulseAudio source | Rust relay → AAudio | 196,608 PCM bytes、peak=285 已验证 |
@@ -64,8 +65,44 @@ GPU_LOADER_DEFAULTS PASS=9 FAIL=0 SKIP=0
 
 - `PANVK_DXVK_COMPAT=1` 的 geometry shader 崩溃是已知支持边界，默认规避不是修复。
 - GLES 3.2 依赖 `MESA_GLES_VERSION_OVERRIDE`，真实应用覆盖不足。
-- Adreno/KGSL 没有参考真机，状态 UNKNOWN。
 - 窗口内容进入宿主 X server 仍不是零拷贝。
+
+### 2.1 Adreno（Qualcomm / KGSL）
+
+节点与后端：
+
+```text
+/dev/kgsl-3d0  crw-rw-rw-（app uid 可 O_RDWR 打开）
+Vulkan 驱动    Turnip，源码构建：Mesa 27.0.0-devel / d211037c
+               usr/lib/aarch64-linux-gnu/libvulkan_freedreno_husk.so
+               SHA-256 35577a1a08ddbad0fada23e2aae3a1ad7b6a0c6b1c45e470b7eb9dab89ad75f5
+ICD            /usr/share/vulkan/icd.d/husk_turnip_guest.json
+```
+
+默认环境：
+
+```text
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/husk_turnip_guest.json
+GALLIUM_DRIVER=zink
+MESA_LOADER_DRIVER_OVERRIDE=zink
+```
+
+实测（OPPO PLE110 / SM8735 / Adreno 825 / Android 16）：
+
+```text
+Device: zink Vulkan 1.4(Adreno (TM) 825 (MESA_TURNIP)) (0x44030000)
+GL 4.6 / GLES 3.2 / direct rendering: Yes
+glxgears 607 / 997 / 940 FPS
+29-turnip-kgsl.sh: PASS=11 FAIL=0
+```
+
+边界：
+
+- 原生 freedreno（不经 Zink）在 a7xx/KGSL 上仍有块状错色，默认固定 `zink`。
+- **客户窗口内容上屏不通**：窗口 `Viewable` 但 X 根图里没有像素，`DRI3 error: Could not get DRI3 device`；
+  宿主 app 进程只有 `/dev/kgsl-3d0`，guest 的 `/dev/dri/renderD128` 是 shim 假节点且只实现
+  `DRM_IOCTL_VERSION`。这是宿主侧缺口，记 LEDGER §21。
+- 两条驱动链（`vendor/panvk/` 与 `vendor/turnip/`）互不覆盖，安装器按节点二选一。
 
 ## 3. 相机、音频、视频和传感器
 
@@ -123,6 +160,6 @@ PRoot 树的 socket 算进 Husk。证据见 evidence 312。
 
 - “所有硬件都是直连”；
 - “整条显示链零拷贝”；
-- “Adreno 已支持”；
+- “Adreno 桌面已经能用”（驱动链通了，客户窗口上屏还卡在宿主 DRI3）；
 - “GNOME 桌面由 Husk 独立启动”；
 - “Husk 是恶意代码安全沙箱”。

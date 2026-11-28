@@ -18,8 +18,10 @@ GOALS 为准，并改这份文件。
 1. **CI 接上**：workflow 已写好，推送 token 还差 `workflow` 权限；接上后徽章才有真状态。
 2. **独立安装走通**：不装 APK，只用 tarball + `install-husk.sh` + `./husk run` 起 `bash`、跑
    `apt`。
-3. **GPU 从「能算」到「能上线」**：补 WSI / swapchain，让窗口表面交给 GPU 直接呈现；
-   现在是 `AHardwareBuffer` → dma-buf → `SurfaceControl` 这条零拷贝链在走。
+3. **GPU 从「能算」到「能上线」**：WSI 已经编进驱动（Mali 的 PanVK、Adreno 的 Turnip 都带
+   X11 WSI），卡住的是**宿主侧**——宿主 X server 取不到 DRM 渲染节点，DRI3 不可用，
+   mutter 合成不了客户窗口。两条出路：宿主提供 DRM 节点并补 KGSL 版 DRM 翻译，或整体换到
+   WD/Wayland 让合成器进 guest。应用侧 `AHardwareBuffer` → dma-buf → `SurfaceControl` 零拷贝链不变。
 4. **静态二进制**：拦不住，看到的是 Android 路径；需要链接层答案或显式白名单。
 5. **第二个发行版**：loader 是版本断言的，换树要重新验证，不是加分支。
 6. **编解码零拷贝**：H.264 走平台解码器已验证；HEVC / VP9 / AV1 与相机缓冲还在拷贝。

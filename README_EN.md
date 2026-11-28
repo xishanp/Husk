@@ -15,7 +15,7 @@
   <img alt="Userland: glibc" src="https://img.shields.io/badge/userland-glibc-0F766E?style=flat-square">
   <img alt="Ubuntu 24.04" src="https://img.shields.io/badge/Ubuntu-24.04-E95420?style=flat-square&logo=ubuntu&logoColor=white">
   <img alt="GNOME 46 / X11 host" src="https://img.shields.io/badge/Desktop-GNOME%2046%20%2F%20X11-4A86CF?style=flat-square&logo=gnome&logoColor=white">
-  <img alt="PanVK / Zink" src="https://img.shields.io/badge/GPU-PanVK%20%2F%20Zink-7C3AED?style=flat-square">
+  <img alt="PanVK + Turnip / Zink" src="https://img.shields.io/badge/GPU-PanVK%20%2B%20Turnip%20%2F%20Zink-7C3AED?style=flat-square">
   <img alt="Android ARM64" src="https://img.shields.io/badge/Platform-Android%20ARM64-3DDC84?style=flat-square&logo=android&logoColor=white">
   <img alt="Rust 1.75+" src="https://img.shields.io/badge/Rust-1.75%2B-DEA584?style=flat-square&logo=rust&logoColor=white">
   <img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square">
@@ -98,7 +98,10 @@ NDK=<ndk>/bin make dist
 
 - A working aarch64 glibc userland: bash, coreutils, Python, GCC, make, apt and dpkg.
 - Nested exec, PTYs, signals and process views are covered by the device gates.
-- GPU direct access through `/dev/mali0` with PanVK and Zink on the validated Mali-G77 device.
+- GPU direct access on two separate driver chains: Mali (kbase) through `/dev/mali0` with PanVK + Zink,
+  and Adreno (KGSL) through `/dev/kgsl-3d0` with a source-built Turnip + Zink.
+  Adreno 825 renders correctly for wallpaper and GL clients, but client window content is still not
+  composited by the host X server (no DRM render node for DRI3) — an external blocker.
 - Camera, audio, video, sensors and location are mediated interfaces, not direct device passthrough.
 - The X11 desktop, input injection and Surface presentation belong to the LinuxHub host application.
 - Static ELF binaries and direct raw syscalls are not path-rewritten; Husk is not a security sandbox.
